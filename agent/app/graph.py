@@ -1,9 +1,9 @@
+import json
 from typing import TypedDict
-
 from langgraph.graph import StateGraph, START, END
-
 from app.tools.kubernetes import get_pod_diagnostics
-
+from app.llm import analyze_pod_diagnostics
+from app.diagnostics import prepare_diagnostics
 
 class CloudOpsState(TypedDict):
     namespace: str
@@ -24,24 +24,27 @@ def collect_diagnostics(state: CloudOpsState) -> dict:
 def analyze_diagnostics(state: CloudOpsState) -> dict:
     diagnostics = state["diagnostics"]
 
+    # Avoid sending failed diagnostic requests to the LLM
     if "error" in diagnostics:
-        analysis = f"Unable to collect diagnostics: {diagnostics['error']}"
+        return {
+            "analysis": (
+                "Unable to collect diagnostics: "
+                f"{diagnostics['error']}"
+            )
+        }
 
-    elif any(
-        container.get("waiting_reason")
-        or container.get("terminated_reason")
-        or not container.get("ready")
-        for container in diagnostics.get("containers", [])
-    ):
-        analysis = (
-            "Potential pod issue detected. Review container state, "
-            "restart counts, events and logs for the root cause."
-        )
+    # Convert Kubernetes diagnostic data into text
+    diagnostic_text = prepare_diagnostics(diagnostics)
 
-    else:
+    # Analyze diagnostics using Azure Foundry GPT-4.1-mini
+    try:
+        analysis = analyze_pod_diagnostics(diagnostic_text)
+    except Exception as exc:
         analysis = (
-            "Pod appears healthy based on its current container state. "
-            "Review any warnings in logs for additional context."
+            "AI analysis unavailable. "
+            f"Error type: {type(exc).__name__}. "
+            "Check Foundry connectivity, authentication, "
+            "deployment configuration, and logs."
         )
 
     return {"analysis": analysis}
@@ -51,9 +54,7 @@ builder = StateGraph(CloudOpsState)
 
 builder.add_node("collect_diagnostics", collect_diagnostics)
 builder.add_node("analyze_diagnostics", analyze_diagnostics)
-
 builder.add_edge(START, "collect_diagnostics")
 builder.add_edge("collect_diagnostics", "analyze_diagnostics")
 builder.add_edge("analyze_diagnostics", END)
-
 graph = builder.compile()
