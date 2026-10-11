@@ -123,7 +123,7 @@ az login
 Set the model endpoint and deployment name:
 
 ```bash
-export AZURE_OPENAI_ENDPOINT="https://foundry-agentic-ai-us2094b-dev.openai.azure.com/"
+export AZURE_OPENAI_ENDPOINT="https://foundry-agentic-ai-xxxxx-dev.openai.azure.com/"
 export AZURE_OPENAI_DEPLOYMENT="gpt-4.1-mini"
 ```
 
