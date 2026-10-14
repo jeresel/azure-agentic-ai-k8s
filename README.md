@@ -433,3 +433,8 @@ The application repository is intentionally separated from the infrastructure re
 Build a secure, extensible, AI-powered CloudOps Assistant that combines Kubernetes observability, agent orchestration, and generative AI to help engineers investigate incidents faster and make informed operational decisions.
 
 The long-term goal is to evolve the application from pod-level diagnostics into a broader **Agentic AI CloudOps platform** capable of intelligent investigation, incident correlation, and controlled remediation across cloud-native environments.
+
+## 15. Technical Article
+I documented the architecture, Terraform deployment, Kubernetes implementation, LangGraph integration, CloudOps GUI, and observability design in a hands-on Medium article.
+
+https://medium.com/@jereselvakumar/building-an-agentic-ai-cloudops-assistant-on-azure-from-terraform-to-kubernetes-and-langgraph-44fa70defcc2
