@@ -418,50 +418,7 @@ The existing redaction controls provide a baseline but should not be considered 
 
 ---
 
-## 12. Current Project Status
-
-| Capability | Status |
-|---|---|
-| Azure infrastructure provisioning | Implemented in separate Terraform repository |
-| AKS cluster connectivity | Tested |
-| Kubernetes Python SDK integration | Tested |
-| Pod status and event collection | Tested |
-| 30-minute diagnostic collection | Tested |
-| Log filtering and redaction | Tested locally |
-| LangGraph workflow | Implemented |
-| Microsoft Foundry GPT-4.1-mini inference | Previously tested |
-| FastAPI backend | Implemented |
-| Web GUI | Tested locally |
-| Dynamic namespace dropdown | Tested locally |
-| Dynamic pod dropdown | Tested locally |
-| Docker and AKS deployment manifests | Available |
-| Latest application changes deployed to AKS | Pending verification |
-| Multi-workload natural-language investigation | Planned |
-| Automated remediation | Not implemented |
-
----
-
-## 13. Future Roadmap
-
-**Phase 1 — Kubernetes Diagnostics**
-
-Pod status, events, logs, container restarts, and termination analysis.
-
-**Phase 2 — AI-Powered Troubleshooting**
-
-LangGraph workflow, Microsoft Foundry inference, diagnostic filtering, and AI-assisted analysis.
-
-**Phase 3 — Web-Based CloudOps Experience**
-
-FastAPI application, dynamic namespace/pod selection, and browser-based troubleshooting.
-
-**Phase 4 — Advanced Agentic CloudOps (Next)**
-
-Extend the agent to support natural-language investigation, multi-workload correlation, incident summaries, and human-approved remediation workflows.
-
----
-
-## 14. Related Repository
+## 12. Related Repository
 
 **Azure Infrastructure — `azure-agentic-ai-infra`**
 
@@ -471,7 +428,7 @@ The application repository is intentionally separated from the infrastructure re
 
 ---
 
-## 15. Project Goal
+## 14. Project Goal
 
 Build a secure, extensible, AI-powered CloudOps Assistant that combines Kubernetes observability, agent orchestration, and generative AI to help engineers investigate incidents faster and make informed operational decisions.
 
