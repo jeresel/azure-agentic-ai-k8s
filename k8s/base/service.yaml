@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudops-ai-agent
+  namespace: cloudops-ai
+spec:
+  type: ClusterIP
+  selector:
+    app: cloudops-ai-agent
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000

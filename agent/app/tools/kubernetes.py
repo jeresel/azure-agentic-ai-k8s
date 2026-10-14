@@ -1,5 +1,6 @@
+
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
@@ -7,8 +8,8 @@ from kubernetes.client.exceptions import ApiException
 
 def get_k8s_client():
     """
-    Use the Pod ServiceAccount when running inside AKS.
-    Use the local kubeconfig during development.
+    Use the Pod ServiceAccount inside AKS.
+    Use local kubeconfig during development.
     """
     if os.getenv("KUBERNETES_SERVICE_HOST"):
         config.load_incluster_config()
@@ -18,11 +19,21 @@ def get_k8s_client():
     return client.CoreV1Api()
 
 
-def get_pod_diagnostics(namespace: str, pod_name: str) -> dict:
+def get_pod_diagnostics(
+    namespace: str,
+    pod_name: str,
+    minutes: int = 30,
+) -> dict:
     """
-    Collect read-only diagnostic information for a Kubernetes pod.
+    Collect read-only Kubernetes diagnostics
+    for the requested time window.
     """
+    if not 1 <= minutes <= 1440:
+        return {"error": "minutes must be between 1 and 1440"}
+
     api = get_k8s_client()
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=minutes)
 
     try:
         pod = api.read_namespaced_pod(
@@ -30,17 +41,23 @@ def get_pod_diagnostics(namespace: str, pod_name: str) -> dict:
             namespace=namespace,
         )
 
-        # Select only events associated with this pod's UID.
         events = api.list_namespaced_event(
             namespace=namespace,
             field_selector=f"involvedObject.uid={pod.metadata.uid}",
         )
 
         containers = []
+
         for container in pod.status.container_statuses or []:
             state = container.state
             waiting = state.waiting if state else None
             terminated = state.terminated if state else None
+
+            previous = (
+                container.last_state.terminated
+                if container.last_state
+                else None
+            )
 
             containers.append({
                 "name": container.name,
@@ -55,42 +72,74 @@ def get_pod_diagnostics(namespace: str, pod_name: str) -> dict:
                     terminated.exit_code if terminated else None
                 ),
                 "last_termination_reason": (
-                    container.last_state.terminated.reason
-                    if container.last_state
-                    and container.last_state.terminated
+                    previous.reason if previous else None
+                ),
+                "last_termination_exit_code": (
+                    previous.exit_code if previous else None
+                ),
+                "last_termination_time": (
+                    previous.finished_at.isoformat()
+                    if previous and previous.finished_at
                     else None
                 ),
             })
 
-        event_details = [
-            {
-                "reason": event.reason,
-                "message": event.message,
-                "type": event.type,
-                "count": event.count,
-            }
-            for event in events.items
-        ]
+        event_details = []
+
+        for event in events.items:
+            event_time = (
+                event.last_timestamp
+                or event.event_time
+                or event.first_timestamp
+                or event.metadata.creation_timestamp
+            )
+
+            if event_time and event_time >= cutoff:
+                event_details.append({
+                    "reason": event.reason,
+                    "message": event.message,
+                    "type": event.type,
+                    "count": event.count,
+                    "timestamp": event_time.isoformat(),
+                })
 
         logs = {}
+        previous_logs = {}
 
         for container in pod.spec.containers:
+            name = container.name
+
             try:
-                logs[container.name] = api.read_namespaced_pod_log(
+                logs[name] = api.read_namespaced_pod_log(
                     name=pod_name,
                     namespace=namespace,
-                    container=container.name,
-                    tail_lines=50,
+                    container=name,
+                    since_seconds=minutes * 60,
+                    tail_lines=200,
                     timestamps=True,
                     _request_timeout=15,
                 )
             except ApiException as exc:
-                logs[container.name] = (
-                    f"Logs unavailable: HTTP {exc.status}"
+                logs[name] = f"Logs unavailable: HTTP {exc.status}"
+
+            try:
+                previous_logs[name] = api.read_namespaced_pod_log(
+                    name=pod_name,
+                    namespace=namespace,
+                    container=name,
+                    previous=True,
+                    since_seconds=minutes * 60,
+                    tail_lines=100,
+                    timestamps=True,
+                    _request_timeout=15,
                 )
+            except ApiException:
+                # Previous logs may not exist.
+                previous_logs[name] = None
 
         return {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": now.isoformat(),
+            "time_window_minutes": minutes,
             "namespace": namespace,
             "pod": pod_name,
             "phase": pod.status.phase,
@@ -98,6 +147,7 @@ def get_pod_diagnostics(namespace: str, pod_name: str) -> dict:
             "containers": containers,
             "events": event_details,
             "logs": logs,
+            "previous_logs": previous_logs,
         }
 
     except ApiException as exc:

@@ -1,2 +1,6 @@
-kubernetes>=32,<36
-langgraph>=1.0,<2.0
+fastapi
+uvicorn[standard]
+langgraph
+kubernetes
+azure-identity
+openai

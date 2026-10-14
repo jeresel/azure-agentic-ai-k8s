@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Azure AI CloudOps Assistant</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, sans-serif; color-scheme: dark; }
+    body { margin: 0; background: #0b1220; color: #e5e7eb; }
+    header { padding: 24px 40px; border-bottom: 1px solid #263244; background: #111b2d; }
+    header h1 { margin: 0; font-size: 24px; }
+    header p { color: #94a3b8; margin-bottom: 0; }
+    main { max-width: 960px; margin: 40px auto; padding: 0 20px; }
+    .card { background: #151f32; border: 1px solid #2b3b52; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    h2 { margin-top: 0; font-size: 18px; }
+    label { display: block; margin: 16px 0 8px; color: #cbd5e1; }
+    select { box-sizing: border-box; width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0b1220; color: #fff; font-size: 15px; }
+    select:disabled { opacity: 0.65; }
+    button { margin-top: 20px; padding: 12px 24px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; }
+    button:hover:not(:disabled) { background: #1d4ed8; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    #status { margin-top: 16px; color: #93c5fd; }
+    #result { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-family: inherit; font-size: 14px; }
+    .muted { color: #94a3b8; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Azure AI CloudOps Assistant</h1>
+  <p>AKS Diagnostics · LangGraph · Microsoft Foundry GPT-4.1-mini</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Kubernetes Pod Diagnostics</h2>
+    <form id="diagnostics-form">
+      <label for="namespace">Namespace</label>
+      <select id="namespace" required disabled>
+        <option value="">Loading namespaces...</option>
+      </select>
+      <label for="pod">Pod Name</label>
+      <select id="pod" required disabled>
+        <option value="">Select a namespace first</option>
+      </select>
+      <button id="analyze-btn" type="submit" disabled>Analyze Pod</button>
+    </form>
+    <div id="status" role="status" aria-live="polite"></div>
+  </section>
+  <section class="card">
+    <h2>AI Root Cause Analysis</h2>
+    <div id="result" class="muted">Select a namespace and pod to begin analysis.</div>
+  </section>
+</main>
+<script>
+  const form = document.getElementById("diagnostics-form");
+  const button = document.getElementById("analyze-btn");
+  const status = document.getElementById("status");
+  const result = document.getElementById("result");
+  const namespaceSelect = document.getElementById("namespace");
+  const podSelect = document.getElementById("pod");
+  let analyzing = false;
+  let podRequestId = 0;
+
+  function setOptions(select, values, placeholder) {
+    select.replaceChildren(new Option(placeholder, ""));
+    for (const value of values) {
+      select.add(new Option(value, value));
+    }
+  }
+
+  function updateButton() {
+    button.disabled = analyzing || !namespaceSelect.value || !podSelect.value || podSelect.disabled;
+  }
+
+  async function loadPods(namespace) {
+    const requestId = ++podRequestId;
+    podSelect.disabled = true;
+    setOptions(podSelect, [], namespace ? "Loading pods..." : "Select a namespace first");
+    updateButton();
+    if (!namespace) return;
+
+    try {
+      const response = await fetch(`/api/pods?namespace=${encodeURIComponent(namespace)}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (requestId !== podRequestId) return;
+      const pods = Array.isArray(data.pods) ? data.pods : [];
+      setOptions(podSelect, pods, pods.length ? "Select a pod" : "No pods found");
+      podSelect.disabled = pods.length === 0;
+      status.textContent = pods.length ? "" : "No pods found in this namespace.";
+    } catch (error) {
+      if (requestId !== podRequestId) return;
+      setOptions(podSelect, [], "Unable to load pods");
+      status.textContent = `Unable to retrieve AKS pods: ${error.message}`;
+    } finally {
+      if (requestId === podRequestId) updateButton();
+    }
+  }
+
+  async function loadNamespaces() {
+    namespaceSelect.disabled = true;
+    podSelect.disabled = true;
+    updateButton();
+    try {
+      const response = await fetch("/api/namespaces");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const namespaces = Array.isArray(data.namespaces) ? data.namespaces : [];
+      setOptions(namespaceSelect, namespaces, namespaces.length ? "Select a namespace" : "No namespaces found");
+      namespaceSelect.disabled = namespaces.length === 0;
+      if (namespaces.includes("cloudops-ai")) {
+        namespaceSelect.value = "cloudops-ai";
+        await loadPods("cloudops-ai");
+      } else {
+        status.textContent = namespaces.length ? "Select a namespace." : "No namespaces available.";
+      }
+    } catch (error) {
+      setOptions(namespaceSelect, [], "Unable to load namespaces");
+      status.textContent = `Unable to retrieve AKS namespaces: ${error.message}`;
+    } finally {
+      updateButton();
+    }
+  }
+
+  namespaceSelect.addEventListener("change", () => {
+    result.classList.add("muted");
+    result.textContent = "Select a pod to begin analysis.";
+    status.textContent = "";
+    loadPods(namespaceSelect.value);
+  });
+
+  podSelect.addEventListener("change", updateButton);
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const namespace = namespaceSelect.value;
+    const pod = podSelect.value;
+    if (!namespace || !pod || analyzing) return;
+
+    analyzing = true;
+    namespaceSelect.disabled = true;
+    podSelect.disabled = true;
+    updateButton();
+    status.textContent = "Collecting AKS diagnostics and analyzing with AI...";
+    result.textContent = "";
+
+    try {
+      const response = await fetch("/api/diagnostics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ namespace, pod })
+      });
+      if (!response.ok) throw new Error(`API request failed: HTTP ${response.status}`);
+      const data = await response.json();
+      result.classList.remove("muted");
+      result.textContent = data.analysis;
+      status.textContent = "Analysis completed.";
+    } catch (error) {
+      status.textContent = "Analysis failed.";
+      result.textContent = error.message;
+    } finally {
+      analyzing = false;
+      namespaceSelect.disabled = false;
+      podSelect.disabled = podSelect.options.length <= 1;
+      updateButton();
+    }
+  });
+
+  loadNamespaces();
+</script>
+</body>
+</html>

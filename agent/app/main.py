@@ -1,7 +1,7 @@
-import argparse
-import json
 
-from app.tools.kubernetes import get_pod_diagnostics
+import argparse
+
+from app.graph import graph
 
 
 def main():
@@ -24,17 +24,17 @@ def main():
     args = parser.parse_args()
 
     print(
-        f"Collecting diagnostics for "
-        f"{args.namespace}/{args.pod}...",
+        f"Analyzing AKS pod: {args.namespace}/{args.pod}",
         flush=True,
     )
 
-    diagnostics = get_pod_diagnostics(
-        namespace=args.namespace,
-        pod_name=args.pod,
-    )
+    result = graph.invoke({
+        "namespace": args.namespace,
+        "pod": args.pod,
+    })
 
-    print(json.dumps(diagnostics, indent=2))
+    print("\n=== AI CloudOps Incident Analysis ===\n")
+    print(result["analysis"])
 
 
 if __name__ == "__main__":

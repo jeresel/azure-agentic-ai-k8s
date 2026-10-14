@@ -1,0 +1,62 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudops-ai-agent
+  namespace: cloudops-ai
+  labels:
+    app: cloudops-ai-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudops-ai-agent
+  template:
+    metadata:
+      labels:
+        app: cloudops-ai-agent
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: cloudops-ai-agent
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cloudops-ai-agent
+          image: acragenticaidev094b.azurecr.io/cloudops-ai-agent:v0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: AZURE_OPENAI_ENDPOINT
+              value: "https://foundry-agentic-ai-us2094b-dev.openai.azure.com/"
+            - name: AZURE_OPENAI_DEPLOYMENT
+              value: "gpt-4.1-mini"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
